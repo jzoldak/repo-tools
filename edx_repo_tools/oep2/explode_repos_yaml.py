@@ -5,6 +5,7 @@ openedx.yaml files in specific repos.
 
 import click
 import logging
+import textwrap
 import yaml
 
 from edx_repo_tools.auth import pass_github
@@ -48,39 +49,93 @@ def explode(hub, dry):
 
         file_contents = yaml.safe_dump(repo_data, indent=4)
 
-        if dry:
-            click.secho(
-                'Against {}/{}'.format(user, repo_name),
-                fg='yellow', bold=True
-            )
-            click.secho(
-                'Would have created openedx.yaml file:',
-                fg='yellow', bold=True
-            )
-            click.secho(file_contents)
-            continue
+        file_contents = textwrap.dedent("""
+            # This file describes this Open edX repo, as described in OEP-2:
+            # http://open-edx-proposals.readthedocs.io/en/latest/oeps/oep-0002.html#specification
+
+            {}
+        """).format(file_contents).strip()
 
         gh_repo = hub.repository(user, repo_name)
 
-        gh_repo.create_ref(
-            'refs/heads/{}'.format(BRANCH_NAME),
-            gh_repo.branch('master').commit.sha,
-        )
-        gh_repo.create_file(
-            path=OPEN_EDX_YAML,
-            message='Add an OEP-2 compliant openedx.yaml file',
-            content=file_contents,
-            branch=BRANCH_NAME,
-        )
-        pull = gh_repo.create_pull(
-            title='Add an OEP-2 compliant openedx.yaml file',
-            base='master',
-            head=BRANCH_NAME,
-        )
-        click.secho('Created pull request {} against {}'.format(
-            pull.html_url,
-            repo,
-        ), fg='green')
+        if gh_repo.fork:
+            LOGGER.info("Skipping %s because it is a fork", gh_repo.full_name)
+            continue
+
+        try:
+            parent_commit = gh_repo.default_branch.commit.sha
+        except:
+            LOGGER.warning(
+                "No commit on default branch %s in repo %s",
+                gh_repo.default_branch,
+                gh_repo.full_name
+            )
+
+        if not dry:
+            if gh_repo.branch(BRANCH_NAME) is None:
+                gh_repo.create_ref(
+                    'refs/heads/{}'.format(BRANCH_NAME),
+                    parent_commit
+                )
+
+            gh_repo.create_file(
+                path=OPEN_EDX_YAML,
+                message='Add an OEP-2 compliant openedx.yaml file',
+                content=file_contents,
+                branch=BRANCH_NAME,
+            )
+        else:
+            click.secho(
+                'Would have created openedx.yaml file on branch {} in {}:'.format(
+                    BRANCH_NAME, gh_repo.full_name,
+                ),
+                fg='green',
+            )
+            click.secho(file_contents, fg='yellow')
+
+        pr_body = textwrap.dedent("""
+            This adds an `openedx.yaml` file, as described by OEP-2:
+            http://open-edx-proposals.readthedocs.io/en/latest/oeps/oep-0002.html
+
+            The data in this file was transformed from the contents of
+            edx/repo-tools-data:repos.yaml
+        """)
+        pr_title = 'Add an OEP-2 compliant openedx.yaml file',
+
+        existing_pr = [
+            pr
+            for pr
+            in gh_repo.iter_pulls(
+                head='edx/{}'.format(BRANCH_NAME),
+                state='open'
+            )
+        ]
+
+        if existing_pr:
+            pull = existing_pr[0]
+            if not dry:
+                pull.update(
+                    title=pr_title,
+                    body=pr_body,
+                )
+            click.secho('{}pdated pull request {} against {}'.format(
+                'Would have u' if dry else 'U',
+                pull.html_url,
+                repo,
+            ), fg='green')
+        else:
+            if not dry:
+                pull = gh_repo.create_pull(
+                    title=pr_title,
+                    base=gh_repo.default_branch,
+                    head=BRANCH_NAME,
+                    body=pr_body
+                )
+            click.secho('{}reated pull request {} against {}'.format(
+                'Would have c' if dry else 'C',
+                pull.html_url if not dry else "N/A",
+                repo,
+            ), fg='green')
 
 
 @click.command()

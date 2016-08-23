@@ -42,8 +42,6 @@ def explode(hub, dry):
 
     repos = yaml.safe_load(repos_yaml)
 
-    dry_text = click.style("DRY RUN - SKIPPED: ", fg='yellow', bold=True) if dry else ""
-
     for repo, repo_data in repos.items():
         user, _, repo_name = repo.partition('/')
 

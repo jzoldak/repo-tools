@@ -125,7 +125,7 @@ def explode(hub, dry):
                 if not dry:
                     gh_repo.update_file(
                         path=OPEN_EDX_YAML,
-                        message='Add an OEP-2 compliant openedx.yaml file',
+                        message='Update the OEP-2 openedx.yaml file',
                         content=file_contents,
                         branch=BRANCH_NAME,
                         sha=contents.sha if contents is not None else None,
